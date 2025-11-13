@@ -8,9 +8,9 @@ const STAGES = {
 };
 
 const STAGE_LABELS = {
-  [STAGES.PENDING]: "🟡 Pending Review",
-  [STAGES.IN_PROGRESS]: "🔵 In Progress",
-  [STAGES.RESOLVED]: "🟢 Resolved",
+  [STAGES.PENDING]: "Pending",
+  [STAGES.IN_PROGRESS]: "In Progress",
+  [STAGES.RESOLVED]: "Resolved",
 };
 
 function Actions() {
@@ -21,6 +21,11 @@ function Actions() {
   const [notes, setNotes] = useState({});
 
   const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
+  // Set page title
+  useEffect(() => {
+    document.title = "Resolution Tracker";
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -118,18 +123,26 @@ function Actions() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+    <div className="min-h-screen p-6">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-white mb-6">🎯 Incident Resolution Tracker</h1>
+        <h1 className="text-3xl font-bold text-white mb-6 animate-fade-in">🎯 Incident Resolution Tracker</h1>
 
         <DragDropContext onDragEnd={handleDragEnd}>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {Object.values(STAGES).map((stage) => (
+            {Object.values(STAGES).map((stage) => {
+              const stageIncidents = getIncidentsByStage(stage);
+              const totalIncidents = incidents.length;
+              return (
               <div
                 key={stage}
-                className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-4 border border-slate-700 shadow-xl shadow-blue-500/10"
+                className="card-premium p-4"
               >
-                <h2 className="text-lg font-semibold text-white mb-4">{STAGE_LABELS[stage]}</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-white">{STAGE_LABELS[stage]}</h2>
+                  <span className="text-sm text-gray-400">
+                    {stageIncidents.length}/{totalIncidents} {STAGE_LABELS[stage]}
+                  </span>
+                </div>
                 <Droppable droppableId={stage}>
                   {(provided, snapshot) => (
                     <div
@@ -139,15 +152,15 @@ function Actions() {
                         snapshot.isDraggingOver ? "bg-slate-700/30 rounded-lg" : ""
                       }`}
                     >
-                      {getIncidentsByStage(stage).map((incident, index) => (
+                      {stageIncidents.map((incident, index) => (
                         <Draggable key={incident.id} draggableId={String(incident.id)} index={index}>
                           {(provided, snapshot) => (
                             <div
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
-                              className={`bg-slate-700/50 rounded-lg p-4 border border-slate-600 hover:border-blue-500 transition-all duration-200 ${
-                                snapshot.isDragging ? "shadow-2xl shadow-blue-500/50" : ""
+                              className={`bg-slate-700/50 rounded-lg p-4 border border-slate-600 hover:border-blue-500 hover:shadow-[0_0_10px_rgba(59,130,246,0.3)] transition-all duration-300 ${
+                                snapshot.isDragging ? "shadow-2xl shadow-blue-500/50 rotate-2 scale-105" : ""
                               }`}
                             >
                               <div className="mb-3">
@@ -155,7 +168,7 @@ function Actions() {
                                   <h3 className="font-semibold text-white text-sm">
                                     {incident.hazard_type || "Unknown Hazard"}
                                   </h3>
-                                  <span className={`text-xs font-bold ${getSeverityColor(incident.severity)}`}>
+                                  <span className={`text-xs font-bold px-2 py-1 rounded ${getSeverityColor(incident.severity)} bg-opacity-20`}>
                                     {incident.severity || "N/A"}
                                   </span>
                                 </div>
@@ -177,19 +190,19 @@ function Actions() {
                                   onClick={(e) => e.stopPropagation()}
                                   className="w-full px-2 py-1 bg-slate-600 text-white text-xs rounded border border-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                                 >
-                                  <option value={STAGES.PENDING}>Pending Review</option>
+                                  <option value={STAGES.PENDING}>Pending</option>
                                   <option value={STAGES.IN_PROGRESS}>In Progress</option>
                                   <option value={STAGES.RESOLVED}>Resolved</option>
                                 </select>
                               </div>
 
                               <div>
-                                <label className="block text-xs text-slate-400 mb-1">Actions Taken:</label>
+                                <label className="block text-xs text-slate-400 mb-1">Next Steps:</label>
                                 <textarea
                                   value={notes[incident.id] || ""}
                                   onChange={(e) => handleNotesChange(incident.id, e.target.value)}
                                   onClick={(e) => e.stopPropagation()}
-                                  placeholder="Add notes about actions taken..."
+                                  placeholder="Add next steps or actions taken..."
                                   className="w-full px-2 py-1 bg-slate-600 text-white text-xs rounded border border-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
                                   rows="3"
                                 />
@@ -203,7 +216,8 @@ function Actions() {
                   )}
                 </Droppable>
               </div>
-            ))}
+            );
+            })}
           </div>
         </DragDropContext>
       </div>

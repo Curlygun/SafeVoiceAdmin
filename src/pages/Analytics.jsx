@@ -8,6 +8,11 @@ function Analytics() {
 
   const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
+  // Set page title
+  useEffect(() => {
+    document.title = "SafeVoice Insights";
+  }, []);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -47,7 +52,7 @@ function Analytics() {
     };
   }, [incidents]);
 
-  // Incidents by Month
+  // Incidents by Month (formatted as "Nov 2025")
   const monthlyData = useMemo(() => {
     const monthCounts = {};
     incidents.forEach((incident) => {
@@ -59,8 +64,13 @@ function Analytics() {
     });
 
     const sorted = Object.entries(monthCounts).sort();
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    
     return {
-      months: sorted.map(([month]) => month),
+      months: sorted.map(([month]) => {
+        const [year, monthNum] = month.split("-");
+        return `${monthNames[parseInt(monthNum) - 1]} ${year}`;
+      }),
       counts: sorted.map(([, count]) => count),
     };
   }, [incidents]);
@@ -91,11 +101,13 @@ function Analytics() {
     };
   }, [incidents]);
 
-  // Incidents by Category
+  // Incidents by Category (normalized case, grouped, sorted descending)
   const categoryData = useMemo(() => {
     const categoryCounts = incidents.reduce((acc, incident) => {
       const cat = incident.category || "Unknown";
-      acc[cat] = (acc[cat] || 0) + 1;
+      // Normalize: capitalize first letter, rest lowercase
+      const normalized = cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase();
+      acc[normalized] = (acc[normalized] || 0) + 1;
       return acc;
     }, {});
 
@@ -141,14 +153,24 @@ function Analytics() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+    <div className="min-h-screen p-6">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-white mb-6 animate-fade-in">📈 Incident Insights Dashboard</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold text-white animate-fade-in">📈 Incident Insights Dashboard</h1>
+          <button
+            onClick={() => {}}
+            className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg border border-blue-500/10 shadow-sm transition-all duration-200 hover:shadow-md hover:shadow-blue-500/20 active:scale-95"
+            aria-label="Export PDF"
+            title="Export analytics dashboard as PDF (visual demo)"
+          >
+            📄 Export PDF
+          </button>
+        </div>
 
         {/* Main Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Incidents by Location - Bar Chart */}
-          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+          <div className="card-premium p-5 animate-fade-in">
             <h2 className="text-lg font-semibold text-white mb-4">Incidents by Location</h2>
             <div className="w-full h-[300px] sm:h-[350px]">
               <Plot
@@ -178,7 +200,7 @@ function Analytics() {
           </div>
 
           {/* Incidents by Month - Line Chart */}
-          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+          <div className="card-premium p-5 animate-fade-in">
             <h2 className="text-lg font-semibold text-white mb-4">Incidents by Month</h2>
             <div className="w-full h-[300px] sm:h-[350px]">
               <Plot
@@ -189,7 +211,7 @@ function Analytics() {
                     type: "scatter",
                     mode: "lines+markers",
                     marker: { color: "#3b82f6", size: 8 },
-                    line: { color: "#3b82f6", width: 3 },
+                    line: { color: "#3b82f6", width: 3, glow: true },
                     fill: "tonexty",
                     fillcolor: "rgba(59, 130, 246, 0.1)",
                   },
@@ -200,6 +222,10 @@ function Analytics() {
                   showlegend: false,
                   margin: { l: 50, r: 20, t: 20, b: 80 },
                   autosize: true,
+                  xaxis: {
+                    ...chartTheme.xaxis,
+                    tickangle: -45,
+                  },
                 }}
                 config={{ displayModeBar: false, responsive: true }}
                 useResizeHandler={true}
@@ -208,33 +234,31 @@ function Analytics() {
             </div>
           </div>
 
-          {/* Incidents by Severity - Bar Chart (changed from pie) */}
-          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+          {/* Incidents by Severity - Pie Chart */}
+          <div className="card-premium p-5 animate-fade-in">
             <h2 className="text-lg font-semibold text-white mb-4">Incidents by Severity</h2>
             <div className="w-full h-[300px] sm:h-[350px]">
               <Plot
                 data={[
                   {
-                    x: severityData.labels,
-                    y: severityData.values,
-                    type: "bar",
+                    labels: severityData.labels,
+                    values: severityData.values,
+                    type: "pie",
                     marker: {
-                      color: ["#10b981", "#f59e0b", "#ef4444"],
-                      line: { color: ["#34d399", "#fbbf24", "#f87171"], width: 1 },
+                      colors: ["#3b82f6", "#60a5fa", "#93c5fd"],
                     },
-                    text: severityData.values,
-                    textposition: "auto",
+                    textinfo: "label+percent+value",
                     textfont: { color: "#cbd5e1", size: 12 },
+                    hovertemplate: "<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<extra></extra>",
                   },
                 ]}
                 layout={{
                   ...chartTheme,
                   height: 350,
-                  showlegend: false,
-                  margin: { l: 50, r: 20, t: 20, b: 50 },
+                  showlegend: true,
+                  legend: { x: 0.5, y: -0.1, orientation: "h" },
+                  margin: { l: 20, r: 20, t: 20, b: 20 },
                   autosize: true,
-                  xaxis: { title: "Severity Level" },
-                  yaxis: { title: "Number of Incidents" },
                 }}
                 config={{ displayModeBar: false, responsive: true }}
                 useResizeHandler={true}
@@ -244,7 +268,7 @@ function Analytics() {
           </div>
 
           {/* Incidents by Category - Bar Chart */}
-          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+          <div className="card-premium p-5 animate-fade-in">
             <h2 className="text-lg font-semibold text-white mb-4">Incidents by Category Type</h2>
             <div className="w-full h-[300px] sm:h-[350px]">
               <Plot
@@ -254,8 +278,8 @@ function Analytics() {
                     y: categoryData.counts,
                     type: "bar",
                     marker: {
-                      color: "#f59e0b",
-                      line: { color: "#fbbf24", width: 1 },
+                      color: ["#3b82f6", "#60a5fa", "#93c5fd", "#3b82f6", "#60a5fa", "#93c5fd"],
+                      line: { color: "#60a5fa", width: 1 },
                     },
                   },
                 ]}
@@ -275,7 +299,7 @@ function Analytics() {
         </div>
 
         {/* Top 5 Reporters Leaderboard */}
-        <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+        <div className="card-premium p-5 animate-fade-in">
           <h2 className="text-lg font-semibold text-white mb-4">Top 5 Reporters</h2>
           <div className="w-full h-[300px]">
             <Plot
@@ -286,7 +310,7 @@ function Analytics() {
                   type: "bar",
                   orientation: "h",
                   marker: {
-                    color: "#3b82f6",
+                    color: ["#3b82f6", "#60a5fa", "#93c5fd", "#3b82f6", "#60a5fa"],
                     line: { color: "#60a5fa", width: 1 },
                   },
                   text: topReporters.counts,

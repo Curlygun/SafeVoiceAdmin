@@ -32,7 +32,7 @@ function Navbar() {
   }, [location.pathname]);
 
   return (
-    <nav className="sticky top-0 z-50 bg-gray-900/90 backdrop-blur-md border-b border-slate-700 shadow-lg">
+    <nav className="sticky top-0 z-50 bg-gray-900/90 backdrop-blur-md border-b border-blue-500/20 shadow-lg shadow-blue-500/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Left: Logo */}

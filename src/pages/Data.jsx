@@ -15,6 +15,11 @@ function Data() {
 
   const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
+  // Set page title
+  useEffect(() => {
+    document.title = "SafeVoice Admin – Incidents";
+  }, []);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -127,7 +132,7 @@ function Data() {
         <h1 className="text-3xl font-bold text-white mb-6">📊 Incident Data</h1>
 
         {/* Filters and Search */}
-        <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-6 mb-6 border border-slate-700 shadow-xl shadow-blue-500/10">
+        <div className="card-premium p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
             <input
               type="text"
@@ -167,12 +172,6 @@ function Data() {
                 </option>
               ))}
             </select>
-            <button
-              onClick={handleDownloadCSV}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all duration-200 shadow-lg shadow-blue-500/50 hover:shadow-blue-500/70"
-            >
-              📥 Download CSV
-            </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input
@@ -217,20 +216,12 @@ function Data() {
                 🔌 Plug Into Company Portal
               </button>
               <button
-                onClick={() => {}}
+                onClick={handleDownloadCSV}
                 className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg border border-blue-500/10 shadow-sm transition-all duration-200 hover:shadow-md hover:shadow-blue-500/20 active:scale-95"
-                aria-label="Export PDF"
-                title="Export current table view as PDF (visual demo)"
+                aria-label="Download CSV"
+                title="Download CSV of current table"
               >
-                📄 Export PDF
-              </button>
-              <button
-                onClick={() => {}}
-                className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg border border-blue-500/10 shadow-sm transition-all duration-200 hover:shadow-md hover:shadow-blue-500/20 active:scale-95"
-                aria-label="Export CSV"
-                title="Download CSV of current table (visual demo)"
-              >
-                📤 Export CSV
+                📥 Download CSV
               </button>
             </div>
           </div>
@@ -238,10 +229,10 @@ function Data() {
         </div>
 
         {/* Table */}
-        <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl overflow-hidden border border-slate-700 shadow-xl shadow-blue-500/10">
+        <div className="card-premium overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="bg-slate-700/50 border-b border-slate-600">
                   <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Date/Time</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Location</th>
@@ -265,7 +256,7 @@ function Data() {
                   paginatedIncidents.map((incident) => (
                     <tr
                       key={incident.id}
-                      className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors duration-150"
+                      className="border-b border-slate-700/50 hover:bg-slate-700/30 hover:shadow-[0_0_10px_rgba(59,130,246,0.3)] transition-all duration-200"
                     >
                       <td className="px-4 py-3 text-sm text-slate-300">
                         {incident.date_time ? new Date(incident.date_time).toLocaleString() : "N/A"}
