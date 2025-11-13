@@ -1,14 +1,10 @@
-import { useEffect, useState, useMemo, Suspense, lazy } from "react";
-import { useNavigate } from "react-router-dom";
-
-const Plot = lazy(() => import("react-plotly.js")); // lazy load Plotly safely
+import { useEffect, useState, useMemo } from "react";
+import Plot from "react-plotly.js";
 
 function Analytics() {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [lastSynced, setLastSynced] = useState(new Date());
-  const navigate = useNavigate();
 
   const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -18,7 +14,6 @@ function Analytics() {
         const res = await fetch(`${API_BASE_URL}/api/incidents`);
         const data = await res.json();
         setIncidents(data.incidents || []);
-        setLastSynced(new Date());
       } catch (err) {
         console.error("Error fetching incidents:", err);
         setError("Failed to load incidents");
@@ -27,23 +22,7 @@ function Analytics() {
       }
     };
     fetchData();
-    // Only update timestamp, no re-fetch (visual only)
-    const interval = setInterval(() => setLastSynced(new Date()), 60000);
-    return () => clearInterval(interval);
   }, [API_BASE_URL]);
-
-  const filteredIncidents = useMemo(() => {
-    const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-    return incidents.filter((i) => {
-      if (!i.date_time) return false;
-      return new Date(i.date_time) >= ninetyDaysAgo;
-    });
-  }, [incidents]);
-
-  const handleChartClick = (filterType, filterValue) => {
-    navigate("/", { state: { filterType, filterValue } });
-  };
 
   const chartTheme = {
     paper_bgcolor: "rgba(30, 41, 59, 0.8)",
@@ -53,228 +32,287 @@ function Analytics() {
     yaxis: { gridcolor: "rgba(148, 163, 184, 0.1)", linecolor: "#475569" },
   };
 
-  // --- Safe guard helper ---
-  const safe = (arr) => Array.isArray(arr) && arr.length > 0;
-
-  // Compute chart data with guards
+  // Incidents by Location
   const locationData = useMemo(() => {
-    if (!filteredIncidents.length) return { locations: [], counts: [] };
-    const counts = {};
-    filteredIncidents.forEach((i) => {
-      const loc = i.location || "Unknown";
-      counts[loc] = (counts[loc] || 0) + 1;
-    });
-    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-    return { locations: sorted.map(([l]) => l), counts: sorted.map(([, c]) => c) };
-  }, [filteredIncidents]);
+    const locationCounts = incidents.reduce((acc, incident) => {
+      const loc = incident.location || "Unknown";
+      acc[loc] = (acc[loc] || 0) + 1;
+      return acc;
+    }, {});
 
-  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const monthlyData = useMemo(() => {
-    const counts = {};
-    filteredIncidents.forEach((i) => {
-      if (!i.date_time) return;
-      const d = new Date(i.date_time);
-      const key = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
-      counts[key] = (counts[key] || 0) + 1;
-    });
-    const sorted = Object.entries(counts);
-    return { months: sorted.map(([m]) => m), counts: sorted.map(([, c]) => c) };
-  }, [filteredIncidents]);
-
-  const severityData = useMemo(() => {
-    const counts = { Low: 0, Medium: 0, High: 0 };
-    incidents.forEach((i) => {
-      const s = (i.severity || "").toLowerCase();
-      if (s === "low") counts.Low++;
-      else if (s === "medium") counts.Medium++;
-      else if (s === "high") counts.High++;
-    });
-    return { labels: ["Low", "Medium", "High"], values: [counts.Low, counts.Medium, counts.High] };
+    const sorted = Object.entries(locationCounts).sort((a, b) => b[1] - a[1]);
+    return {
+      locations: sorted.map(([loc]) => loc),
+      counts: sorted.map(([, count]) => count),
+    };
   }, [incidents]);
 
-  const categoryData = useMemo(() => {
-    const counts = {};
-    filteredIncidents.forEach((i) => {
-      const cat = i.category || "Unknown";
-      const norm = cat
-        .split(" ")
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-        .join(" ");
-      counts[norm] = (counts[norm] || 0) + 1;
+  // Incidents by Month
+  const monthlyData = useMemo(() => {
+    const monthCounts = {};
+    incidents.forEach((incident) => {
+      if (incident.date_time) {
+        const date = new Date(incident.date_time);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+        monthCounts[monthKey] = (monthCounts[monthKey] || 0) + 1;
+      }
     });
-    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-    return { categories: sorted.map(([c]) => c), counts: sorted.map(([, c]) => c) };
-  }, [filteredIncidents]);
 
+    const sorted = Object.entries(monthCounts).sort();
+    return {
+      months: sorted.map(([month]) => month),
+      counts: sorted.map(([, count]) => count),
+    };
+  }, [incidents]);
+
+  // Incidents by Severity (normalized)
+  const severityData = useMemo(() => {
+    const severityCounts = incidents.reduce((acc, incident) => {
+      const sev = incident.severity || "Unknown";
+      // Normalize: combine "low"/"Low" → "Low", "medium"/"Medium" → "Medium", "high"/"High" → "High"
+      let normalized = sev;
+      if (typeof sev === "string") {
+        const lower = sev.toLowerCase();
+        if (lower === "low") normalized = "Low";
+        else if (lower === "medium") normalized = "Medium";
+        else if (lower === "high") normalized = "High";
+      }
+      acc[normalized] = (acc[normalized] || 0) + 1;
+      return acc;
+    }, {});
+
+    // Ensure we always show Low, Medium, High in that order
+    const orderedLabels = ["Low", "Medium", "High"];
+    const orderedValues = orderedLabels.map((label) => severityCounts[label] || 0);
+
+    return {
+      labels: orderedLabels,
+      values: orderedValues,
+    };
+  }, [incidents]);
+
+  // Incidents by Category
+  const categoryData = useMemo(() => {
+    const categoryCounts = incidents.reduce((acc, incident) => {
+      const cat = incident.category || "Unknown";
+      acc[cat] = (acc[cat] || 0) + 1;
+      return acc;
+    }, {});
+
+    const sorted = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]);
+    return {
+      categories: sorted.map(([cat]) => cat),
+      counts: sorted.map(([, count]) => count),
+    };
+  }, [incidents]);
+
+  // Top 5 Reporters
   const topReporters = useMemo(() => {
-    const counts = {};
-    incidents.forEach((i) => {
-      const r = i.reported_by || "Unknown";
-      counts[r] = (counts[r] || 0) + 1;
-    });
-    const sorted = Object.entries(counts)
+    const reporterCounts = incidents.reduce((acc, incident) => {
+      const reporter = incident.reported_by || "Unknown";
+      acc[reporter] = (acc[reporter] || 0) + 1;
+      return acc;
+    }, {});
+
+    const sorted = Object.entries(reporterCounts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5);
-    return { reporters: sorted.map(([r]) => r), counts: sorted.map(([, c]) => c) };
-  }, [filteredIncidents]);
 
-  if (loading)
-    return <div className="min-h-screen flex items-center justify-center text-white">Loading analytics...</div>;
-  if (error)
-    return <div className="min-h-screen flex items-center justify-center text-red-400">{error}</div>;
+    return {
+      reporters: sorted.map(([reporter]) => reporter),
+      counts: sorted.map(([, count]) => count),
+    };
+  }, [incidents]);
 
-  useEffect(() => {
-    document.title = "SafeVoice Insights";
-  }, []);
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-white text-xl">Loading analytics...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-red-400 text-xl">{error}</div>
+      </div>
+    );
+  }
 
   return (
-    <Suspense fallback={<div className="text-gray-400 text-center mt-20">Loading charts...</div>}>
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0a0a1a] p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <h1 className="text-3xl font-bold text-white animate-fade-in">📈 Incident Insights Dashboard</h1>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-gray-300">
-                Last Synced: {lastSynced.toLocaleTimeString()}
-              </div>
-              <label className="flex items-center gap-2 text-sm text-gray-300">
-                <input type="checkbox" className="rounded" disabled />
-                Auto-refresh every 5 min
-              </label>
-            </div>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-3xl font-bold text-white mb-6 animate-fade-in">📈 Incident Insights Dashboard</h1>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            {safe(locationData.locations) && safe(locationData.counts) && locationData.locations.length > 0 && (
-              <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
-                <h2 className="text-lg font-semibold text-white mb-4">Incidents by Location</h2>
-                <div className="w-full h-[300px] sm:h-[350px]">
-                  <Plot
-                    data={[{ x: locationData.locations, y: locationData.counts, type: "bar", marker: { color: "#3b82f6", line: { color: "#60a5fa", width: 1 } } }]}
-                    layout={{ ...chartTheme, height: 350, autosize: true, margin: { l: 50, r: 20, t: 20, b: 80 }, showlegend: false }}
-                    config={{ responsive: true, displayModeBar: false }}
-                    style={{ width: "100%", height: "100%" }}
-                    onClick={(data) => {
-                      if (data?.points?.[0]?.x) {
-                        handleChartClick("location", data.points[0].x);
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {safe(monthlyData.months) && safe(monthlyData.counts) && monthlyData.months.length > 0 && (
-              <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
-                <h2 className="text-lg font-semibold text-white mb-4">Incidents by Month</h2>
-                <div className="w-full h-[300px] sm:h-[350px]">
-                  <Plot
-                    data={[
-                      {
-                        x: monthlyData.months,
-                        y: monthlyData.counts,
-                        type: "scatter",
-                        mode: "lines+markers",
-                        line: { color: "#3b82f6", width: 3, shape: "spline" },
-                        marker: { color: "#60a5fa", size: 8 },
-                        fill: "tonexty",
-                        fillcolor: "rgba(59, 130, 246, 0.1)",
-                      },
-                    ]}
-                    layout={{ ...chartTheme, height: 350, autosize: true, margin: { l: 50, r: 20, t: 20, b: 80 }, showlegend: false, xaxis: { ...chartTheme.xaxis, tickangle: -45 } }}
-                    config={{ responsive: true, displayModeBar: false }}
-                    style={{ width: "100%", height: "100%" }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {safe(severityData.values) && severityData.values.some(v => v > 0) && (
-              <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
-                <h2 className="text-lg font-semibold text-white mb-4">Incidents by Severity</h2>
-                <div className="w-full h-[300px] sm:h-[350px]">
-                  <Plot
-                    data={[
-                      {
-                        labels: severityData.labels,
-                        values: severityData.values,
-                        type: "pie",
-                        marker: { colors: ["#3b82f6", "#60a5fa", "#93c5fd"] },
-                        textinfo: "label+percent+value",
-                        textfont: { color: "#cbd5e1", size: 12 },
-                        hovertemplate: "<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<extra></extra>",
-                      },
-                    ]}
-                    layout={{ ...chartTheme, height: 350, autosize: true, showlegend: true, legend: { x: 0.5, y: -0.1, orientation: "h" }, margin: { l: 20, r: 20, t: 20, b: 20 } }}
-                    config={{ responsive: true, displayModeBar: false }}
-                    style={{ width: "100%", height: "100%" }}
-                    onClick={(data) => {
-                      if (data?.points?.[0]?.label) {
-                        handleChartClick("severity", data.points[0].label);
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {safe(categoryData.categories) && safe(categoryData.counts) && categoryData.categories.length > 0 && (
-              <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
-                <h2 className="text-lg font-semibold text-white mb-4">Incidents by Category Type</h2>
-                <div className="w-full h-[300px] sm:h-[350px]">
-                  <Plot
-                    data={[
-                      {
-                        x: categoryData.categories,
-                        y: categoryData.counts,
-                        type: "bar",
-                        marker: { color: "#3b82f6", line: { color: "#60a5fa", width: 1 } },
-                      },
-                    ]}
-                    layout={{ ...chartTheme, height: 350, autosize: true, margin: { l: 50, r: 20, t: 20, b: 80 }, showlegend: false, xaxis: { ...chartTheme.xaxis, tickangle: -45 } }}
-                    config={{ responsive: true, displayModeBar: false }}
-                    style={{ width: "100%", height: "100%" }}
-                    onClick={(data) => {
-                      if (data?.points?.[0]?.x) {
-                        handleChartClick("category", data.points[0].x);
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {safe(topReporters.reporters) && safe(topReporters.counts) && topReporters.reporters.length > 0 && (
-            <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
-              <h2 className="text-lg font-semibold text-white mb-4">Top 5 Reporters</h2>
-              <div className="w-full h-[300px]">
-                <Plot
-                  data={[
-                    {
-                      x: topReporters.counts,
-                      y: topReporters.reporters,
-                      type: "bar",
-                      orientation: "h",
-                      marker: { color: "#3b82f6", line: { color: "#60a5fa", width: 1 } },
-                      text: topReporters.counts,
-                      textposition: "auto",
-                      textfont: { color: "#cbd5e1", size: 12 },
+        {/* Main Charts Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Incidents by Location - Bar Chart */}
+          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+            <h2 className="text-lg font-semibold text-white mb-4">Incidents by Location</h2>
+            <div className="w-full h-[300px] sm:h-[350px]">
+              <Plot
+                data={[
+                  {
+                    x: locationData.locations,
+                    y: locationData.counts,
+                    type: "bar",
+                    marker: {
+                      color: "#3b82f6",
+                      line: { color: "#60a5fa", width: 1 },
                     },
-                  ]}
-                  layout={{ ...chartTheme, height: 300, autosize: true, margin: { l: 150, r: 20, t: 20, b: 50 }, showlegend: false, xaxis: { title: "Number of Reports" }, yaxis: { title: "Reporter Name" } }}
-                  config={{ responsive: true, displayModeBar: false }}
-                  style={{ width: "100%", height: "100%" }}
-                />
-              </div>
+                  },
+                ]}
+                layout={{
+                  ...chartTheme,
+                  height: 350,
+                  showlegend: false,
+                  margin: { l: 50, r: 20, t: 20, b: 80 },
+                  autosize: true,
+                }}
+                config={{ displayModeBar: false, responsive: true }}
+                useResizeHandler={true}
+                style={{ width: "100%", height: "100%" }}
+              />
             </div>
-          )}
+          </div>
+
+          {/* Incidents by Month - Line Chart */}
+          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+            <h2 className="text-lg font-semibold text-white mb-4">Incidents by Month</h2>
+            <div className="w-full h-[300px] sm:h-[350px]">
+              <Plot
+                data={[
+                  {
+                    x: monthlyData.months,
+                    y: monthlyData.counts,
+                    type: "scatter",
+                    mode: "lines+markers",
+                    marker: { color: "#3b82f6", size: 8 },
+                    line: { color: "#3b82f6", width: 3 },
+                    fill: "tonexty",
+                    fillcolor: "rgba(59, 130, 246, 0.1)",
+                  },
+                ]}
+                layout={{
+                  ...chartTheme,
+                  height: 350,
+                  showlegend: false,
+                  margin: { l: 50, r: 20, t: 20, b: 80 },
+                  autosize: true,
+                }}
+                config={{ displayModeBar: false, responsive: true }}
+                useResizeHandler={true}
+                style={{ width: "100%", height: "100%" }}
+              />
+            </div>
+          </div>
+
+          {/* Incidents by Severity - Bar Chart (changed from pie) */}
+          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+            <h2 className="text-lg font-semibold text-white mb-4">Incidents by Severity</h2>
+            <div className="w-full h-[300px] sm:h-[350px]">
+              <Plot
+                data={[
+                  {
+                    x: severityData.labels,
+                    y: severityData.values,
+                    type: "bar",
+                    marker: {
+                      color: ["#10b981", "#f59e0b", "#ef4444"],
+                      line: { color: ["#34d399", "#fbbf24", "#f87171"], width: 1 },
+                    },
+                    text: severityData.values,
+                    textposition: "auto",
+                    textfont: { color: "#cbd5e1", size: 12 },
+                  },
+                ]}
+                layout={{
+                  ...chartTheme,
+                  height: 350,
+                  showlegend: false,
+                  margin: { l: 50, r: 20, t: 20, b: 50 },
+                  autosize: true,
+                  xaxis: { title: "Severity Level" },
+                  yaxis: { title: "Number of Incidents" },
+                }}
+                config={{ displayModeBar: false, responsive: true }}
+                useResizeHandler={true}
+                style={{ width: "100%", height: "100%" }}
+              />
+            </div>
+          </div>
+
+          {/* Incidents by Category - Bar Chart */}
+          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+            <h2 className="text-lg font-semibold text-white mb-4">Incidents by Category Type</h2>
+            <div className="w-full h-[300px] sm:h-[350px]">
+              <Plot
+                data={[
+                  {
+                    x: categoryData.categories,
+                    y: categoryData.counts,
+                    type: "bar",
+                    marker: {
+                      color: "#f59e0b",
+                      line: { color: "#fbbf24", width: 1 },
+                    },
+                  },
+                ]}
+                layout={{
+                  ...chartTheme,
+                  height: 350,
+                  showlegend: false,
+                  margin: { l: 50, r: 20, t: 20, b: 80 },
+                  autosize: true,
+                }}
+                config={{ displayModeBar: false, responsive: true }}
+                useResizeHandler={true}
+                style={{ width: "100%", height: "100%" }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Top 5 Reporters Leaderboard */}
+        <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+          <h2 className="text-lg font-semibold text-white mb-4">Top 5 Reporters</h2>
+          <div className="w-full h-[300px]">
+            <Plot
+              data={[
+                {
+                  x: topReporters.counts,
+                  y: topReporters.reporters,
+                  type: "bar",
+                  orientation: "h",
+                  marker: {
+                    color: "#3b82f6",
+                    line: { color: "#60a5fa", width: 1 },
+                  },
+                  text: topReporters.counts,
+                  textposition: "auto",
+                  textfont: { color: "#cbd5e1", size: 12 },
+                },
+              ]}
+              layout={{
+                ...chartTheme,
+                height: 300,
+                showlegend: false,
+                margin: { l: 150, r: 20, t: 20, b: 50 },
+                autosize: true,
+                xaxis: { title: "Number of Reports" },
+                yaxis: { title: "Reporter Name" },
+              }}
+              config={{ displayModeBar: false, responsive: true }}
+              useResizeHandler={true}
+              style={{ width: "100%", height: "100%" }}
+            />
+          </div>
         </div>
       </div>
-    </Suspense>
+    </div>
   );
 }
-
 
 export default Analytics;
 

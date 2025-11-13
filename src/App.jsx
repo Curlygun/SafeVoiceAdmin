@@ -7,22 +7,13 @@ import Actions from "./pages/Actions";
 export default function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0a0a1a] flex flex-col">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
         <Navbar />
-        <main className="flex-grow">
-          <Routes>
-            <Route path="/" element={<Data />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/actions" element={<Actions />} />
-          </Routes>
-        </main>
-        <footer className="bg-gray-900/70 backdrop-blur-md border-t border-blue-500/20 py-4 mt-auto">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <p className="text-gray-300 text-sm">
-              © 2025 SafeVoice | Built at IIT Madras Innovation Hub
-            </p>
-          </div>
-        </footer>
+        <Routes>
+          <Route path="/" element={<Data />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/actions" element={<Actions />} />
+        </Routes>
       </div>
     </Router>
   );
