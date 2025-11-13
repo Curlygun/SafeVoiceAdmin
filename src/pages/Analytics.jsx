@@ -65,17 +65,29 @@ function Analytics() {
     };
   }, [incidents]);
 
-  // Incidents by Severity
+  // Incidents by Severity (normalized)
   const severityData = useMemo(() => {
     const severityCounts = incidents.reduce((acc, incident) => {
       const sev = incident.severity || "Unknown";
-      acc[sev] = (acc[sev] || 0) + 1;
+      // Normalize: combine "low"/"Low" → "Low", "medium"/"Medium" → "Medium", "high"/"High" → "High"
+      let normalized = sev;
+      if (typeof sev === "string") {
+        const lower = sev.toLowerCase();
+        if (lower === "low") normalized = "Low";
+        else if (lower === "medium") normalized = "Medium";
+        else if (lower === "high") normalized = "High";
+      }
+      acc[normalized] = (acc[normalized] || 0) + 1;
       return acc;
     }, {});
 
+    // Ensure we always show Low, Medium, High in that order
+    const orderedLabels = ["Low", "Medium", "High"];
+    const orderedValues = orderedLabels.map((label) => severityCounts[label] || 0);
+
     return {
-      labels: Object.keys(severityCounts),
-      values: Object.values(severityCounts),
+      labels: orderedLabels,
+      values: orderedValues,
     };
   }, [incidents]);
 
@@ -131,144 +143,171 @@ function Analytics() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-white mb-6">📈 Incident Insights Dashboard</h1>
+        <h1 className="text-3xl font-bold text-white mb-6 animate-fade-in">📈 Incident Insights Dashboard</h1>
 
         {/* Main Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Incidents by Location - Bar Chart */}
-          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10">
+          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
             <h2 className="text-lg font-semibold text-white mb-4">Incidents by Location</h2>
-            <Plot
-              data={[
-                {
-                  x: locationData.locations,
-                  y: locationData.counts,
-                  type: "bar",
-                  marker: {
-                    color: "#3b82f6",
-                    line: { color: "#60a5fa", width: 1 },
+            <div className="w-full h-[300px] sm:h-[350px]">
+              <Plot
+                data={[
+                  {
+                    x: locationData.locations,
+                    y: locationData.counts,
+                    type: "bar",
+                    marker: {
+                      color: "#3b82f6",
+                      line: { color: "#60a5fa", width: 1 },
+                    },
                   },
-                },
-              ]}
-              layout={{
-                ...chartTheme,
-                height: 350,
-                showlegend: false,
-                margin: { l: 50, r: 20, t: 20, b: 80 },
-              }}
-              config={{ displayModeBar: false, responsive: true }}
-              style={{ width: "100%", height: "100%" }}
-            />
+                ]}
+                layout={{
+                  ...chartTheme,
+                  height: 350,
+                  showlegend: false,
+                  margin: { l: 50, r: 20, t: 20, b: 80 },
+                  autosize: true,
+                }}
+                config={{ displayModeBar: false, responsive: true }}
+                useResizeHandler={true}
+                style={{ width: "100%", height: "100%" }}
+              />
+            </div>
           </div>
 
           {/* Incidents by Month - Line Chart */}
-          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10">
+          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
             <h2 className="text-lg font-semibold text-white mb-4">Incidents by Month</h2>
-            <Plot
-              data={[
-                {
-                  x: monthlyData.months,
-                  y: monthlyData.counts,
-                  type: "scatter",
-                  mode: "lines+markers",
-                  marker: { color: "#3b82f6", size: 8 },
-                  line: { color: "#3b82f6", width: 3 },
-                  fill: "tonexty",
-                  fillcolor: "rgba(59, 130, 246, 0.1)",
-                },
-              ]}
-              layout={{
-                ...chartTheme,
-                height: 350,
-                showlegend: false,
-                margin: { l: 50, r: 20, t: 20, b: 80 },
-              }}
-              config={{ displayModeBar: false, responsive: true }}
-              style={{ width: "100%", height: "100%" }}
-            />
+            <div className="w-full h-[300px] sm:h-[350px]">
+              <Plot
+                data={[
+                  {
+                    x: monthlyData.months,
+                    y: monthlyData.counts,
+                    type: "scatter",
+                    mode: "lines+markers",
+                    marker: { color: "#3b82f6", size: 8 },
+                    line: { color: "#3b82f6", width: 3 },
+                    fill: "tonexty",
+                    fillcolor: "rgba(59, 130, 246, 0.1)",
+                  },
+                ]}
+                layout={{
+                  ...chartTheme,
+                  height: 350,
+                  showlegend: false,
+                  margin: { l: 50, r: 20, t: 20, b: 80 },
+                  autosize: true,
+                }}
+                config={{ displayModeBar: false, responsive: true }}
+                useResizeHandler={true}
+                style={{ width: "100%", height: "100%" }}
+              />
+            </div>
           </div>
 
-          {/* Incidents by Severity - Pie Chart */}
-          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10">
+          {/* Incidents by Severity - Bar Chart (changed from pie) */}
+          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
             <h2 className="text-lg font-semibold text-white mb-4">Incidents by Severity</h2>
-            <Plot
-              data={[
-                {
-                  labels: severityData.labels,
-                  values: severityData.values,
-                  type: "pie",
-                  marker: {
-                    colors: ["#10b981", "#f59e0b", "#ef4444"],
+            <div className="w-full h-[300px] sm:h-[350px]">
+              <Plot
+                data={[
+                  {
+                    x: severityData.labels,
+                    y: severityData.values,
+                    type: "bar",
+                    marker: {
+                      color: ["#10b981", "#f59e0b", "#ef4444"],
+                      line: { color: ["#34d399", "#fbbf24", "#f87171"], width: 1 },
+                    },
+                    text: severityData.values,
+                    textposition: "auto",
+                    textfont: { color: "#cbd5e1", size: 12 },
                   },
-                  textinfo: "label+percent",
-                  textfont: { color: "#cbd5e1" },
-                },
-              ]}
-              layout={{
-                ...chartTheme,
-                height: 350,
-                showlegend: true,
-                legend: { x: 0.5, y: -0.1, orientation: "h" },
-                margin: { l: 20, r: 20, t: 20, b: 20 },
-              }}
-              config={{ displayModeBar: false, responsive: true }}
-              style={{ width: "100%", height: "100%" }}
-            />
+                ]}
+                layout={{
+                  ...chartTheme,
+                  height: 350,
+                  showlegend: false,
+                  margin: { l: 50, r: 20, t: 20, b: 50 },
+                  autosize: true,
+                  xaxis: { title: "Severity Level" },
+                  yaxis: { title: "Number of Incidents" },
+                }}
+                config={{ displayModeBar: false, responsive: true }}
+                useResizeHandler={true}
+                style={{ width: "100%", height: "100%" }}
+              />
+            </div>
           </div>
 
           {/* Incidents by Category - Bar Chart */}
-          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10">
+          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
             <h2 className="text-lg font-semibold text-white mb-4">Incidents by Category Type</h2>
-            <Plot
-              data={[
-                {
-                  x: categoryData.categories,
-                  y: categoryData.counts,
-                  type: "bar",
-                  marker: {
-                    color: "#f59e0b",
-                    line: { color: "#fbbf24", width: 1 },
+            <div className="w-full h-[300px] sm:h-[350px]">
+              <Plot
+                data={[
+                  {
+                    x: categoryData.categories,
+                    y: categoryData.counts,
+                    type: "bar",
+                    marker: {
+                      color: "#f59e0b",
+                      line: { color: "#fbbf24", width: 1 },
+                    },
                   },
-                },
-              ]}
-              layout={{
-                ...chartTheme,
-                height: 350,
-                showlegend: false,
-                margin: { l: 50, r: 20, t: 20, b: 80 },
-              }}
-              config={{ displayModeBar: false, responsive: true }}
-              style={{ width: "100%", height: "100%" }}
-            />
+                ]}
+                layout={{
+                  ...chartTheme,
+                  height: 350,
+                  showlegend: false,
+                  margin: { l: 50, r: 20, t: 20, b: 80 },
+                  autosize: true,
+                }}
+                config={{ displayModeBar: false, responsive: true }}
+                useResizeHandler={true}
+                style={{ width: "100%", height: "100%" }}
+              />
+            </div>
           </div>
         </div>
 
         {/* Top 5 Reporters Leaderboard */}
-        <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10">
+        <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
           <h2 className="text-lg font-semibold text-white mb-4">Top 5 Reporters</h2>
-          <Plot
-            data={[
-              {
-                x: topReporters.counts,
-                y: topReporters.reporters,
-                type: "bar",
-                orientation: "h",
-                marker: {
-                  color: "#8b5cf6",
-                  line: { color: "#a78bfa", width: 1 },
+          <div className="w-full h-[300px]">
+            <Plot
+              data={[
+                {
+                  x: topReporters.counts,
+                  y: topReporters.reporters,
+                  type: "bar",
+                  orientation: "h",
+                  marker: {
+                    color: "#3b82f6",
+                    line: { color: "#60a5fa", width: 1 },
+                  },
+                  text: topReporters.counts,
+                  textposition: "auto",
+                  textfont: { color: "#cbd5e1", size: 12 },
                 },
-              },
-            ]}
-            layout={{
-              ...chartTheme,
-              height: 300,
-              showlegend: false,
-              margin: { l: 150, r: 20, t: 20, b: 50 },
-              xaxis: { title: "Number of Reports" },
-            }}
-            config={{ displayModeBar: false, responsive: true }}
-            style={{ width: "100%", height: "100%" }}
-          />
+              ]}
+              layout={{
+                ...chartTheme,
+                height: 300,
+                showlegend: false,
+                margin: { l: 150, r: 20, t: 20, b: 50 },
+                autosize: true,
+                xaxis: { title: "Number of Reports" },
+                yaxis: { title: "Reporter Name" },
+              }}
+              config={{ displayModeBar: false, responsive: true }}
+              useResizeHandler={true}
+              style={{ width: "100%", height: "100%" }}
+            />
+          </div>
         </div>
       </div>
     </div>
