@@ -1,10 +1,13 @@
 import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import Plot from "react-plotly.js";
 
 function Analytics() {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [lastSynced, setLastSynced] = useState(new Date());
+  const navigate = useNavigate();
 
   const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -14,6 +17,7 @@ function Analytics() {
         const res = await fetch(`${API_BASE_URL}/api/incidents`);
         const data = await res.json();
         setIncidents(data.incidents || []);
+        setLastSynced(new Date());
       } catch (err) {
         console.error("Error fetching incidents:", err);
         setError("Failed to load incidents");
@@ -22,7 +26,38 @@ function Analytics() {
       }
     };
     fetchData();
+    
+    // Update last synced time every minute
+    const interval = setInterval(() => {
+      setLastSynced(new Date());
+    }, 60000);
+    
+    return () => clearInterval(interval);
   }, [API_BASE_URL]);
+
+  // Filter incidents to last 90 days by default
+  const filteredIncidents = useMemo(() => {
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    return incidents.filter((incident) => {
+      if (!incident.date_time) return false;
+      const incidentDate = new Date(incident.date_time);
+      return incidentDate >= ninetyDaysAgo;
+    });
+  }, [incidents]);
+
+  // Handle chart click events for filtering
+  const handleChartClick = (filterType, filterValue) => {
+    const params = new URLSearchParams();
+    if (filterType === "severity") {
+      params.set("severity", filterValue);
+    } else if (filterType === "category") {
+      params.set("category", filterValue);
+    } else if (filterType === "location") {
+      params.set("location", filterValue);
+    }
+    navigate(`/?${params.toString()}`);
+  };
 
   const chartTheme = {
     paper_bgcolor: "rgba(30, 41, 59, 0.8)",
@@ -34,7 +69,7 @@ function Analytics() {
 
   // Incidents by Location
   const locationData = useMemo(() => {
-    const locationCounts = incidents.reduce((acc, incident) => {
+    const locationCounts = filteredIncidents.reduce((acc, incident) => {
       const loc = incident.location || "Unknown";
       acc[loc] = (acc[loc] || 0) + 1;
       return acc;
@@ -45,12 +80,12 @@ function Analytics() {
       locations: sorted.map(([loc]) => loc),
       counts: sorted.map(([, count]) => count),
     };
-  }, [incidents]);
+  }, [filteredIncidents]);
 
-  // Incidents by Month
+  // Incidents by Month - with formatted labels
   const monthlyData = useMemo(() => {
     const monthCounts = {};
-    incidents.forEach((incident) => {
+    filteredIncidents.forEach((incident) => {
       if (incident.date_time) {
         const date = new Date(incident.date_time);
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -59,11 +94,16 @@ function Analytics() {
     });
 
     const sorted = Object.entries(monthCounts).sort();
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    
     return {
-      months: sorted.map(([month]) => month),
+      months: sorted.map(([month]) => {
+        const [year, monthNum] = month.split("-");
+        return `${monthNames[parseInt(monthNum) - 1]} ${year}`;
+      }),
       counts: sorted.map(([, count]) => count),
     };
-  }, [incidents]);
+  }, [filteredIncidents]);
 
   // Incidents by Severity (normalized)
   const severityData = useMemo(() => {
@@ -91,11 +131,16 @@ function Analytics() {
     };
   }, [incidents]);
 
-  // Incidents by Category
+  // Incidents by Category - normalized case
   const categoryData = useMemo(() => {
     const categoryCounts = incidents.reduce((acc, incident) => {
       const cat = incident.category || "Unknown";
-      acc[cat] = (acc[cat] || 0) + 1;
+      // Normalize case: capitalize first letter of each word
+      const normalized = cat
+        .split(" ")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(" ");
+      acc[normalized] = (acc[normalized] || 0) + 1;
       return acc;
     }, {});
 
@@ -104,7 +149,7 @@ function Analytics() {
       categories: sorted.map(([cat]) => cat),
       counts: sorted.map(([, count]) => count),
     };
-  }, [incidents]);
+  }, [filteredIncidents]);
 
   // Top 5 Reporters
   const topReporters = useMemo(() => {
@@ -122,11 +167,11 @@ function Analytics() {
       reporters: sorted.map(([reporter]) => reporter),
       counts: sorted.map(([, count]) => count),
     };
-  }, [incidents]);
+  }, [filteredIncidents]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0a0a1a] flex items-center justify-center">
         <div className="text-white text-xl">Loading analytics...</div>
       </div>
     );
@@ -134,21 +179,36 @@ function Analytics() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0a0a1a] flex items-center justify-center">
         <div className="text-red-400 text-xl">{error}</div>
       </div>
     );
   }
 
+  useEffect(() => {
+    document.title = "SafeVoice Insights";
+  }, []);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0a0a1a] p-6">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-white mb-6 animate-fade-in">📈 Incident Insights Dashboard</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold text-white animate-fade-in">📈 Incident Insights Dashboard</h1>
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-300">
+              Last Synced: {lastSynced.toLocaleTimeString()}
+            </div>
+            <label className="flex items-center gap-2 text-sm text-gray-300">
+              <input type="checkbox" className="rounded" disabled />
+              Auto-refresh every 5 min
+            </label>
+          </div>
+        </div>
 
         {/* Main Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Incidents by Location - Bar Chart */}
-          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+          <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
             <h2 className="text-lg font-semibold text-white mb-4">Incidents by Location</h2>
             <div className="w-full h-[300px] sm:h-[350px]">
               <Plot
@@ -163,12 +223,18 @@ function Analytics() {
                     },
                   },
                 ]}
+                onClick={(data) => {
+                  if (data.points && data.points[0]) {
+                    handleChartClick("location", data.points[0].x);
+                  }
+                }}
                 layout={{
                   ...chartTheme,
                   height: 350,
                   showlegend: false,
                   margin: { l: 50, r: 20, t: 20, b: 80 },
                   autosize: true,
+                  xaxis: { ...chartTheme.xaxis, tickangle: -45 },
                 }}
                 config={{ displayModeBar: false, responsive: true }}
                 useResizeHandler={true}
@@ -178,7 +244,7 @@ function Analytics() {
           </div>
 
           {/* Incidents by Month - Line Chart */}
-          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+          <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
             <h2 className="text-lg font-semibold text-white mb-4">Incidents by Month</h2>
             <div className="w-full h-[300px] sm:h-[350px]">
               <Plot
@@ -189,7 +255,11 @@ function Analytics() {
                     type: "scatter",
                     mode: "lines+markers",
                     marker: { color: "#3b82f6", size: 8 },
-                    line: { color: "#3b82f6", width: 3 },
+                    line: { 
+                      color: "#3b82f6", 
+                      width: 3,
+                      shape: "spline",
+                    },
                     fill: "tonexty",
                     fillcolor: "rgba(59, 130, 246, 0.1)",
                   },
@@ -200,6 +270,7 @@ function Analytics() {
                   showlegend: false,
                   margin: { l: 50, r: 20, t: 20, b: 80 },
                   autosize: true,
+                  xaxis: { ...chartTheme.xaxis, tickangle: -45 },
                 }}
                 config={{ displayModeBar: false, responsive: true }}
                 useResizeHandler={true}
@@ -208,43 +279,46 @@ function Analytics() {
             </div>
           </div>
 
-          {/* Incidents by Severity - Bar Chart (changed from pie) */}
-          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+          {/* Incidents by Severity - Pie Chart */}
+          <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
             <h2 className="text-lg font-semibold text-white mb-4">Incidents by Severity</h2>
             <div className="w-full h-[300px] sm:h-[350px]">
               <Plot
                 data={[
                   {
-                    x: severityData.labels,
-                    y: severityData.values,
-                    type: "bar",
+                    labels: severityData.labels,
+                    values: severityData.values,
+                    type: "pie",
                     marker: {
-                      color: ["#10b981", "#f59e0b", "#ef4444"],
-                      line: { color: ["#34d399", "#fbbf24", "#f87171"], width: 1 },
+                      colors: ["#3b82f6", "#60a5fa", "#93c5fd"],
                     },
-                    text: severityData.values,
-                    textposition: "auto",
+                    textinfo: "label+percent+value",
                     textfont: { color: "#cbd5e1", size: 12 },
+                    hovertemplate: "<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<extra></extra>",
                   },
                 ]}
                 layout={{
                   ...chartTheme,
                   height: 350,
-                  showlegend: false,
-                  margin: { l: 50, r: 20, t: 20, b: 50 },
+                  showlegend: true,
+                  legend: { x: 0.5, y: -0.1, orientation: "h" },
+                  margin: { l: 20, r: 20, t: 20, b: 20 },
                   autosize: true,
-                  xaxis: { title: "Severity Level" },
-                  yaxis: { title: "Number of Incidents" },
                 }}
                 config={{ displayModeBar: false, responsive: true }}
                 useResizeHandler={true}
                 style={{ width: "100%", height: "100%" }}
+                onClick={(data) => {
+                  if (data.points && data.points[0]) {
+                    handleChartClick("severity", data.points[0].label);
+                  }
+                }}
               />
             </div>
           </div>
 
           {/* Incidents by Category - Bar Chart */}
-          <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+          <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
             <h2 className="text-lg font-semibold text-white mb-4">Incidents by Category Type</h2>
             <div className="w-full h-[300px] sm:h-[350px]">
               <Plot
@@ -265,17 +339,23 @@ function Analytics() {
                   showlegend: false,
                   margin: { l: 50, r: 20, t: 20, b: 80 },
                   autosize: true,
+                  xaxis: { ...chartTheme.xaxis, tickangle: -45 },
                 }}
                 config={{ displayModeBar: false, responsive: true }}
                 useResizeHandler={true}
                 style={{ width: "100%", height: "100%" }}
+                onClick={(data) => {
+                  if (data.points && data.points[0]) {
+                    handleChartClick("category", data.points[0].x);
+                  }
+                }}
               />
             </div>
           </div>
         </div>
 
         {/* Top 5 Reporters Leaderboard */}
-        <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-5 border border-slate-700 shadow-xl shadow-blue-500/10 animate-fade-in">
+        <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
           <h2 className="text-lg font-semibold text-white mb-4">Top 5 Reporters</h2>
           <div className="w-full h-[300px]">
             <Plot

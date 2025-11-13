@@ -1,13 +1,16 @@
 import { useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { saveAs } from "file-saver";
 
 function Data() {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
-  const [severityFilter, setSeverityFilter] = useState("All");
-  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [severityFilter, setSeverityFilter] = useState(searchParams.get("severity") || "All");
+  const [categoryFilter, setCategoryFilter] = useState(searchParams.get("category") || "All");
+  const [locationFilter, setLocationFilter] = useState(searchParams.get("location") || "All");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -20,7 +23,13 @@ function Data() {
       try {
         const res = await fetch(`${API_BASE_URL}/api/incidents`);
         const data = await res.json();
-        setIncidents(data.incidents || []);
+        // Sort by latest incidents first
+        const sorted = (data.incidents || []).sort((a, b) => {
+          const dateA = new Date(a.date_time || 0);
+          const dateB = new Date(b.date_time || 0);
+          return dateB - dateA;
+        });
+        setIncidents(sorted);
       } catch (err) {
         console.error("Error fetching incidents:", err);
         setError("Failed to load incidents");
@@ -31,6 +40,20 @@ function Data() {
     fetchData();
   }, [API_BASE_URL]);
 
+  // Update filters from URL params
+  useEffect(() => {
+    const severity = searchParams.get("severity");
+    const category = searchParams.get("category");
+    const location = searchParams.get("location");
+    if (severity) setSeverityFilter(severity);
+    if (category) setCategoryFilter(category);
+    if (location) setLocationFilter(location);
+  }, [searchParams]);
+
+  useEffect(() => {
+    document.title = "SafeVoice Admin – Incidents";
+  }, []);
+
   const filteredIncidents = useMemo(() => {
     return incidents.filter((incident) => {
       const matchesSearch =
@@ -38,8 +61,24 @@ function Data() {
         Object.values(incident).some((val) =>
           String(val).toLowerCase().includes(searchTerm.toLowerCase())
         );
-      const matchesSeverity = severityFilter === "All" || incident.severity === severityFilter;
-      const matchesCategory = categoryFilter === "All" || incident.category === categoryFilter;
+      // Normalize severity for comparison
+      const incidentSeverity = typeof incident.severity === "string" 
+        ? incident.severity.charAt(0).toUpperCase() + incident.severity.slice(1).toLowerCase()
+        : incident.severity;
+      const filterSeverity = severityFilter === "All" ? "All" 
+        : severityFilter.charAt(0).toUpperCase() + severityFilter.slice(1).toLowerCase();
+      const matchesSeverity = filterSeverity === "All" || incidentSeverity === filterSeverity;
+      
+      // Normalize category for comparison
+      const normalizeCategory = (cat) => cat
+        .split(" ")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(" ");
+      const incidentCategory = incident.category ? normalizeCategory(incident.category) : "";
+      const filterCategory = categoryFilter === "All" ? "All" : normalizeCategory(categoryFilter);
+      const matchesCategory = filterCategory === "All" || incidentCategory === filterCategory;
+      
+      const matchesLocation = locationFilter === "All" || incident.location === locationFilter;
       
       let matchesDate = true;
       if (dateFrom || dateTo) {
@@ -56,9 +95,20 @@ function Data() {
         }
       }
 
-      return matchesSearch && matchesSeverity && matchesCategory && matchesDate;
+      return matchesSearch && matchesSeverity && matchesCategory && matchesLocation && matchesDate;
     });
-  }, [incidents, searchTerm, severityFilter, categoryFilter, dateFrom, dateTo]);
+  }, [incidents, searchTerm, severityFilter, categoryFilter, locationFilter, dateFrom, dateTo]);
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setSeverityFilter("All");
+    setCategoryFilter("All");
+    setLocationFilter("All");
+    setDateFrom("");
+    setDateTo("");
+    setSearchParams({});
+    setCurrentPage(1);
+  };
 
   const paginatedIncidents = useMemo(() => {
     const startIndex = (currentPage - 1) * rowsPerPage;
@@ -68,7 +118,18 @@ function Data() {
   const totalPages = Math.ceil(filteredIncidents.length / rowsPerPage);
 
   const uniqueCategories = useMemo(() => {
-    return [...new Set(incidents.map((i) => i.category))].filter(Boolean).sort();
+    const normalized = incidents.map((i) => {
+      if (!i.category) return null;
+      return i.category
+        .split(" ")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(" ");
+    });
+    return [...new Set(normalized)].filter(Boolean).sort();
+  }, [incidents]);
+
+  const uniqueLocations = useMemo(() => {
+    return [...new Set(incidents.map((i) => i.location))].filter(Boolean).sort();
   }, [incidents]);
 
   const handleDownloadCSV = () => {
@@ -107,7 +168,7 @@ function Data() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0a0a1a] flex items-center justify-center">
         <div className="text-white text-xl">Loading incidents...</div>
       </div>
     );
@@ -115,20 +176,43 @@ function Data() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0a0a1a] flex items-center justify-center">
         <div className="text-red-400 text-xl">{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0a0a1a] p-6">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-white mb-6">📊 Incident Data</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold text-white">📊 Incident Data</h1>
+          <div className="flex items-center gap-2">
+            <button
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg shadow transition-all duration-200 hover:shadow-lg hover:shadow-blue-500/50 relative group"
+              title="Coming Soon: Integrate with enterprise dashboards"
+            >
+              🔌 Plug Into Company Portal
+            </button>
+            <button
+              className="bg-slate-700 hover:bg-slate-600 text-white font-semibold px-4 py-2 rounded-lg shadow transition-all duration-200"
+              title="Export to PDF (Coming Soon)"
+            >
+              📄 Export PDF
+            </button>
+            <button
+              onClick={handleDownloadCSV}
+              className="bg-slate-700 hover:bg-slate-600 text-white font-semibold px-4 py-2 rounded-lg shadow transition-all duration-200"
+              title="Export to CSV"
+            >
+              📤 Export CSV
+            </button>
+          </div>
+        </div>
 
         {/* Filters and Search */}
-        <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-6 mb-6 border border-slate-700 shadow-xl shadow-blue-500/10">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-6 mb-6 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)]">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
             <input
               type="text"
               placeholder="Search incidents..."
@@ -167,11 +251,26 @@ function Data() {
                 </option>
               ))}
             </select>
-            <button
-              onClick={handleDownloadCSV}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all duration-200 shadow-lg shadow-blue-500/50 hover:shadow-blue-500/70"
+            <select
+              value={locationFilter}
+              onChange={(e) => {
+                setLocationFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              📥 Download CSV
+              <option value="All">All Locations</option>
+              {uniqueLocations.map((loc) => (
+                <option key={loc} value={loc}>
+                  {loc}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={clearFilters}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-all duration-200 shadow-lg shadow-red-500/50 hover:shadow-red-500/70"
+            >
+              🗑️ Clear Filters
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -204,11 +303,11 @@ function Data() {
         </div>
 
         {/* Table */}
-        <div className="bg-slate-800/80 backdrop-blur-sm rounded-xl overflow-hidden border border-slate-700 shadow-xl shadow-blue-500/10">
-          <div className="overflow-x-auto">
+        <div className="bg-gray-900/70 backdrop-blur-md rounded-xl overflow-hidden border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)]">
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
             <table className="w-full">
-              <thead>
-                <tr className="bg-slate-700/50 border-b border-slate-600">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-slate-700/90 backdrop-blur-sm border-b border-slate-600">
                   <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Date/Time</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Location</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Hazard Type</th>
@@ -231,7 +330,7 @@ function Data() {
                   paginatedIncidents.map((incident) => (
                     <tr
                       key={incident.id}
-                      className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors duration-150"
+                      className="border-b border-slate-700/50 hover:bg-slate-700/30 hover:shadow-md hover:shadow-blue-500/20 transition-all duration-200"
                     >
                       <td className="px-4 py-3 text-sm text-slate-300">
                         {incident.date_time ? new Date(incident.date_time).toLocaleString() : "N/A"}

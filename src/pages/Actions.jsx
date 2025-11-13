@@ -95,15 +95,16 @@ function Actions() {
     }));
   };
 
-  const getSeverityColor = (severity) => {
-    if (severity === "High") return "text-red-400";
-    if (severity === "Medium") return "text-yellow-400";
-    return "text-green-400";
+  const getSeverityBadgeClass = (severity) => {
+    const sev = (severity || "").toLowerCase();
+    if (sev === "high") return "text-red-400 bg-red-400/20 border border-red-400/30";
+    if (sev === "medium") return "text-yellow-400 bg-yellow-400/20 border border-yellow-400/30";
+    return "text-green-400 bg-green-400/20 border border-green-400/30";
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0a0a1a] flex items-center justify-center">
         <div className="text-white text-xl">Loading incidents...</div>
       </div>
     );
@@ -111,43 +112,67 @@ function Actions() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0a0a1a] flex items-center justify-center">
         <div className="text-red-400 text-xl">{error}</div>
       </div>
     );
   }
 
+  useEffect(() => {
+    document.title = "Resolution Tracker";
+  }, []);
+
+  const getProgressForStage = (stage) => {
+    const stageIncidents = getIncidentsByStage(stage);
+    const total = incidents.length;
+    return total > 0 ? Math.round((stageIncidents.length / total) * 100) : 0;
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0a0a1a] p-6">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold text-white mb-6">🎯 Incident Resolution Tracker</h1>
 
         <DragDropContext onDragEnd={handleDragEnd}>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {Object.values(STAGES).map((stage) => (
+            {Object.values(STAGES).map((stage) => {
+              const stageIncidents = getIncidentsByStage(stage);
+              const progress = getProgressForStage(stage);
+              return (
               <div
                 key={stage}
-                className="bg-slate-800/80 backdrop-blur-sm rounded-xl p-4 border border-slate-700 shadow-xl shadow-blue-500/10"
+                className="bg-gray-900/70 backdrop-blur-md rounded-xl p-4 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)]"
               >
-                <h2 className="text-lg font-semibold text-white mb-4">{STAGE_LABELS[stage]}</h2>
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-lg font-semibold text-white">{STAGE_LABELS[stage]}</h2>
+                    <span className="text-sm text-gray-300">{stageIncidents.length}/{incidents.length}</span>
+                  </div>
+                  <div className="w-full bg-slate-700/50 rounded-full h-2">
+                    <div
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
                 <Droppable droppableId={stage}>
                   {(provided, snapshot) => (
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
                       className={`min-h-[400px] space-y-3 ${
-                        snapshot.isDraggingOver ? "bg-slate-700/30 rounded-lg" : ""
+                        snapshot.isDraggingOver ? "bg-blue-500/10 rounded-lg border-2 border-blue-500/30" : ""
                       }`}
                     >
-                      {getIncidentsByStage(stage).map((incident, index) => (
+                      {stageIncidents.map((incident, index) => (
                         <Draggable key={incident.id} draggableId={String(incident.id)} index={index}>
                           {(provided, snapshot) => (
                             <div
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
-                              className={`bg-slate-700/50 rounded-lg p-4 border border-slate-600 hover:border-blue-500 transition-all duration-200 ${
-                                snapshot.isDragging ? "shadow-2xl shadow-blue-500/50" : ""
+                              className={`bg-slate-700/50 rounded-lg p-4 border border-slate-600 hover:border-blue-500 hover:shadow-md hover:shadow-blue-500/20 transition-all duration-200 ${
+                                snapshot.isDragging ? "shadow-2xl shadow-blue-500/50 rotate-2 scale-105" : ""
                               }`}
                             >
                               <div className="mb-3">
@@ -155,7 +180,7 @@ function Actions() {
                                   <h3 className="font-semibold text-white text-sm">
                                     {incident.hazard_type || "Unknown Hazard"}
                                   </h3>
-                                  <span className={`text-xs font-bold ${getSeverityColor(incident.severity)}`}>
+                                  <span className={`text-xs font-bold px-2 py-1 rounded ${getSeverityBadgeClass(incident.severity)}`}>
                                     {incident.severity || "N/A"}
                                   </span>
                                 </div>
@@ -203,7 +228,8 @@ function Actions() {
                   )}
                 </Droppable>
               </div>
-            ))}
+              );
+            })}
           </div>
         </DragDropContext>
       </div>
