@@ -27,6 +27,7 @@ function Analytics() {
       }
     };
     fetchData();
+    // Only update timestamp, no re-fetch (visual only)
     const interval = setInterval(() => setLastSynced(new Date()), 60000);
     return () => clearInterval(interval);
   }, [API_BASE_URL]);
@@ -40,10 +41,8 @@ function Analytics() {
     });
   }, [incidents]);
 
-  const handleChartClick = (type, value) => {
-    const params = new URLSearchParams();
-    params.set(type, value);
-    navigate(`/?${params.toString()}`);
+  const handleChartClick = (filterType, filterValue) => {
+    navigate("/", { state: { filterType, filterValue } });
   };
 
   const chartTheme = {
@@ -132,109 +131,142 @@ function Analytics() {
     <Suspense fallback={<div className="text-gray-400 text-center mt-20">Loading charts...</div>}>
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0a0a1a] p-6">
         <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between mb-6">
-            <h1 className="text-3xl font-bold text-white">📈 Incident Insights Dashboard</h1>
-            <div className="text-sm text-gray-300">
-              Last Synced: {lastSynced.toLocaleTimeString()}
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-3xl font-bold text-white animate-fade-in">📈 Incident Insights Dashboard</h1>
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-gray-300">
+                Last Synced: {lastSynced.toLocaleTimeString()}
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <input type="checkbox" className="rounded" disabled />
+                Auto-refresh every 5 min
+              </label>
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            {safe(locationData.locations) && (
-              <div className="bg-gray-900/70 rounded-xl p-5 border border-blue-500/20 shadow">
-                <h2 className="text-white mb-4">Incidents by Location</h2>
-                <Plot
-                  data={[{ x: locationData.locations, y: locationData.counts, type: "bar", marker: { color: "#3b82f6" } }]}
-                  layout={{ ...chartTheme, height: 350, margin: { l: 50, r: 20, t: 20, b: 80 } }}
-                  config={{ responsive: true, displayModeBar: false }}
-                  useResizeHandler
-                  style={{ width: "100%", height: "100%" }}
-                />
+            {safe(locationData.locations) && safe(locationData.counts) && locationData.locations.length > 0 && (
+              <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
+                <h2 className="text-lg font-semibold text-white mb-4">Incidents by Location</h2>
+                <div className="w-full h-[300px] sm:h-[350px]">
+                  <Plot
+                    data={[{ x: locationData.locations, y: locationData.counts, type: "bar", marker: { color: "#3b82f6", line: { color: "#60a5fa", width: 1 } } }]}
+                    layout={{ ...chartTheme, height: 350, autosize: true, margin: { l: 50, r: 20, t: 20, b: 80 }, showlegend: false }}
+                    config={{ responsive: true, displayModeBar: false }}
+                    style={{ width: "100%", height: "100%" }}
+                    onClick={(data) => {
+                      if (data?.points?.[0]?.x) {
+                        handleChartClick("location", data.points[0].x);
+                      }
+                    }}
+                  />
+                </div>
               </div>
             )}
 
-            {safe(monthlyData.months) && (
-              <div className="bg-gray-900/70 rounded-xl p-5 border border-blue-500/20 shadow">
-                <h2 className="text-white mb-4">Incidents by Month</h2>
-                <Plot
-                  data={[
-                    {
-                      x: monthlyData.months,
-                      y: monthlyData.counts,
-                      type: "scatter",
-                      mode: "lines+markers",
-                      line: { color: "#3b82f6", width: 3 },
-                      marker: { color: "#60a5fa" },
-                    },
-                  ]}
-                  layout={{ ...chartTheme, height: 350, margin: { l: 50, r: 20, t: 20, b: 80 } }}
-                  config={{ responsive: true, displayModeBar: false }}
-                  useResizeHandler
-                  style={{ width: "100%", height: "100%" }}
-                />
+            {safe(monthlyData.months) && safe(monthlyData.counts) && monthlyData.months.length > 0 && (
+              <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
+                <h2 className="text-lg font-semibold text-white mb-4">Incidents by Month</h2>
+                <div className="w-full h-[300px] sm:h-[350px]">
+                  <Plot
+                    data={[
+                      {
+                        x: monthlyData.months,
+                        y: monthlyData.counts,
+                        type: "scatter",
+                        mode: "lines+markers",
+                        line: { color: "#3b82f6", width: 3, shape: "spline" },
+                        marker: { color: "#60a5fa", size: 8 },
+                        fill: "tonexty",
+                        fillcolor: "rgba(59, 130, 246, 0.1)",
+                      },
+                    ]}
+                    layout={{ ...chartTheme, height: 350, autosize: true, margin: { l: 50, r: 20, t: 20, b: 80 }, showlegend: false, xaxis: { ...chartTheme.xaxis, tickangle: -45 } }}
+                    config={{ responsive: true, displayModeBar: false }}
+                    style={{ width: "100%", height: "100%" }}
+                  />
+                </div>
               </div>
             )}
 
-            <div className="bg-gray-900/70 rounded-xl p-5 border border-blue-500/20 shadow">
-              <h2 className="text-white mb-4">Incidents by Severity</h2>
-              <Plot
-                data={[
-                  {
-                    labels: severityData.labels,
-                    values: severityData.values,
-                    type: "pie",
-                    marker: { colors: ["#3b82f6", "#60a5fa", "#93c5fd"] },
-                    textinfo: "label+percent+value",
-                  },
-                ]}
-                layout={{ ...chartTheme, height: 350, showlegend: true }}
-                config={{ responsive: true, displayModeBar: false }}
-                useResizeHandler
-                style={{ width: "100%", height: "100%" }}
-              />
-            </div>
+            {safe(severityData.values) && severityData.values.some(v => v > 0) && (
+              <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
+                <h2 className="text-lg font-semibold text-white mb-4">Incidents by Severity</h2>
+                <div className="w-full h-[300px] sm:h-[350px]">
+                  <Plot
+                    data={[
+                      {
+                        labels: severityData.labels,
+                        values: severityData.values,
+                        type: "pie",
+                        marker: { colors: ["#3b82f6", "#60a5fa", "#93c5fd"] },
+                        textinfo: "label+percent+value",
+                        textfont: { color: "#cbd5e1", size: 12 },
+                        hovertemplate: "<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<extra></extra>",
+                      },
+                    ]}
+                    layout={{ ...chartTheme, height: 350, autosize: true, showlegend: true, legend: { x: 0.5, y: -0.1, orientation: "h" }, margin: { l: 20, r: 20, t: 20, b: 20 } }}
+                    config={{ responsive: true, displayModeBar: false }}
+                    style={{ width: "100%", height: "100%" }}
+                    onClick={(data) => {
+                      if (data?.points?.[0]?.label) {
+                        handleChartClick("severity", data.points[0].label);
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            )}
 
-            {safe(categoryData.categories) && (
-              <div className="bg-gray-900/70 rounded-xl p-5 border border-blue-500/20 shadow">
-                <h2 className="text-white mb-4">Incidents by Category Type</h2>
-                <Plot
-                  data={[
-                    {
-                      x: categoryData.categories,
-                      y: categoryData.counts,
-                      type: "bar",
-                      marker: { color: "#f59e0b" },
-                    },
-                  ]}
-                  layout={{ ...chartTheme, height: 350, margin: { l: 50, r: 20, t: 20, b: 80 } }}
-                  config={{ responsive: true, displayModeBar: false }}
-                  useResizeHandler
-                  style={{ width: "100%", height: "100%" }}
-                />
+            {safe(categoryData.categories) && safe(categoryData.counts) && categoryData.categories.length > 0 && (
+              <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
+                <h2 className="text-lg font-semibold text-white mb-4">Incidents by Category Type</h2>
+                <div className="w-full h-[300px] sm:h-[350px]">
+                  <Plot
+                    data={[
+                      {
+                        x: categoryData.categories,
+                        y: categoryData.counts,
+                        type: "bar",
+                        marker: { color: "#3b82f6", line: { color: "#60a5fa", width: 1 } },
+                      },
+                    ]}
+                    layout={{ ...chartTheme, height: 350, autosize: true, margin: { l: 50, r: 20, t: 20, b: 80 }, showlegend: false, xaxis: { ...chartTheme.xaxis, tickangle: -45 } }}
+                    config={{ responsive: true, displayModeBar: false }}
+                    style={{ width: "100%", height: "100%" }}
+                    onClick={(data) => {
+                      if (data?.points?.[0]?.x) {
+                        handleChartClick("category", data.points[0].x);
+                      }
+                    }}
+                  />
+                </div>
               </div>
             )}
           </div>
 
-          {safe(topReporters.reporters) && (
-            <div className="bg-gray-900/70 rounded-xl p-5 border border-blue-500/20 shadow">
-              <h2 className="text-white mb-4">Top 5 Reporters</h2>
-              <Plot
-                data={[
-                  {
-                    x: topReporters.counts,
-                    y: topReporters.reporters,
-                    type: "bar",
-                    orientation: "h",
-                    marker: { color: "#3b82f6" },
-                    text: topReporters.counts,
-                    textposition: "auto",
-                  },
-                ]}
-                layout={{ ...chartTheme, height: 300, margin: { l: 150, r: 20, t: 20, b: 50 } }}
-                config={{ responsive: true, displayModeBar: false }}
-                useResizeHandler
-                style={{ width: "100%", height: "100%" }}
-              />
+          {safe(topReporters.reporters) && safe(topReporters.counts) && topReporters.reporters.length > 0 && (
+            <div className="bg-gray-900/70 backdrop-blur-md rounded-xl p-5 border border-blue-500/20 shadow-[0_0_15px_rgba(59,130,246,0.4)] animate-fade-in">
+              <h2 className="text-lg font-semibold text-white mb-4">Top 5 Reporters</h2>
+              <div className="w-full h-[300px]">
+                <Plot
+                  data={[
+                    {
+                      x: topReporters.counts,
+                      y: topReporters.reporters,
+                      type: "bar",
+                      orientation: "h",
+                      marker: { color: "#3b82f6", line: { color: "#60a5fa", width: 1 } },
+                      text: topReporters.counts,
+                      textposition: "auto",
+                      textfont: { color: "#cbd5e1", size: 12 },
+                    },
+                  ]}
+                  layout={{ ...chartTheme, height: 300, autosize: true, margin: { l: 150, r: 20, t: 20, b: 50 }, showlegend: false, xaxis: { title: "Number of Reports" }, yaxis: { title: "Reporter Name" } }}
+                  config={{ responsive: true, displayModeBar: false }}
+                  style={{ width: "100%", height: "100%" }}
+                />
+              </div>
             </div>
           )}
         </div>

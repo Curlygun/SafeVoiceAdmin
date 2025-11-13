@@ -1,16 +1,16 @@
 import { useEffect, useState, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { saveAs } from "file-saver";
 
 function Data() {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
-  const [severityFilter, setSeverityFilter] = useState(searchParams.get("severity") || "All");
-  const [categoryFilter, setCategoryFilter] = useState(searchParams.get("category") || "All");
-  const [locationFilter, setLocationFilter] = useState(searchParams.get("location") || "All");
+  const [severityFilter, setSeverityFilter] = useState("All");
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [locationFilter, setLocationFilter] = useState("All");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -40,15 +40,21 @@ function Data() {
     fetchData();
   }, [API_BASE_URL]);
 
-  // Update filters from URL params
+  // Update filters from React Router state (from chart clicks)
   useEffect(() => {
-    const severity = searchParams.get("severity");
-    const category = searchParams.get("category");
-    const location = searchParams.get("location");
-    if (severity) setSeverityFilter(severity);
-    if (category) setCategoryFilter(category);
-    if (location) setLocationFilter(location);
-  }, [searchParams]);
+    if (location.state?.filterType && location.state?.filterValue) {
+      const { filterType, filterValue } = location.state;
+      if (filterType === "severity") {
+        setSeverityFilter(filterValue);
+      } else if (filterType === "category") {
+        setCategoryFilter(filterValue);
+      } else if (filterType === "location") {
+        setLocationFilter(filterValue);
+      }
+      // Clear state after applying filter
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     document.title = "SafeVoice Admin – Incidents";
@@ -106,7 +112,6 @@ function Data() {
     setLocationFilter("All");
     setDateFrom("");
     setDateTo("");
-    setSearchParams({});
     setCurrentPage(1);
   };
 

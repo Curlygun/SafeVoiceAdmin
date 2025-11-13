@@ -23,41 +23,65 @@ function Actions() {
   const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
   useEffect(() => {
+    let isMounted = true;
     const fetchData = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/incidents`);
+        if (!res.ok) throw new Error("Failed to fetch");
         const data = await res.json();
-        setIncidents(data.incidents || []);
+        
+        if (isMounted) {
+          setIncidents(data.incidents || []);
 
-        // Load saved statuses and notes from localStorage
-        const savedStatuses = localStorage.getItem("incidentStatuses");
-        const savedNotes = localStorage.getItem("incidentNotes");
-        if (savedStatuses) {
-          setIncidentStatuses(JSON.parse(savedStatuses));
-        }
-        if (savedNotes) {
-          setNotes(JSON.parse(savedNotes));
+          // Load saved statuses and notes from localStorage
+          try {
+            const savedStatuses = localStorage.getItem("incidentStatuses");
+            const savedNotes = localStorage.getItem("incidentNotes");
+            if (savedStatuses) {
+              setIncidentStatuses(JSON.parse(savedStatuses));
+            }
+            if (savedNotes) {
+              setNotes(JSON.parse(savedNotes));
+            }
+          } catch (storageErr) {
+            console.warn("Error loading from localStorage:", storageErr);
+          }
         }
       } catch (err) {
         console.error("Error fetching incidents:", err);
-        setError("Failed to load incidents");
+        if (isMounted) {
+          setError("Failed to load incidents");
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
     fetchData();
+    return () => {
+      isMounted = false;
+    };
   }, [API_BASE_URL]);
 
-  // Save to localStorage whenever statuses or notes change
+  // Save to localStorage whenever statuses or notes change (debounced)
   useEffect(() => {
     if (Object.keys(incidentStatuses).length > 0) {
-      localStorage.setItem("incidentStatuses", JSON.stringify(incidentStatuses));
+      try {
+        localStorage.setItem("incidentStatuses", JSON.stringify(incidentStatuses));
+      } catch (err) {
+        console.warn("Error saving to localStorage:", err);
+      }
     }
   }, [incidentStatuses]);
 
   useEffect(() => {
     if (Object.keys(notes).length > 0) {
-      localStorage.setItem("incidentNotes", JSON.stringify(notes));
+      try {
+        localStorage.setItem("incidentNotes", JSON.stringify(notes));
+      } catch (err) {
+        console.warn("Error saving to localStorage:", err);
+      }
     }
   }, [notes]);
 
@@ -123,9 +147,9 @@ function Actions() {
   }, []);
 
   const getProgressForStage = (stage) => {
+    if (!incidents || incidents.length === 0) return 0;
     const stageIncidents = getIncidentsByStage(stage);
-    const total = incidents.length;
-    return total > 0 ? Math.round((stageIncidents.length / total) * 100) : 0;
+    return Math.round((stageIncidents.length / incidents.length) * 100);
   };
 
   return (
